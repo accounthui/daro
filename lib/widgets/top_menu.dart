@@ -1,4 +1,6 @@
 import 'package:base_ui_flutter/base_ui_flutter.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -22,6 +24,9 @@ import 'theme_customize_dialog.dart';
 /// 鼠标进入最大化按钮区域后,系统返回 HTMAXBUTTON 接管事件,Flutter 端
 /// MouseRegion 失效,必须由 native 端主动推送 hover 状态才能重绘按钮背景。
 const _titlebarChannel = MethodChannel('daro/titlebar');
+
+// macOS 隐藏标题栏后原生红黄绿按钮仍覆盖在内容层上方,需为其预留空间。
+const _macOSWindowControlsWidth = 70.0;
 
 // 顶部菜单栏兼应用标题栏:文件/编辑/查看/收藏夹/工具/窗口/帮助。
 // 菜单本身由 base_ui_flutter 的 MenuStrip 提供(点击展开 + 悬停自动切换);
@@ -103,6 +108,7 @@ class _TopMenuState extends State<TopMenu> with WindowListener {
     final appPalette = Tokens.of(context);
     final app = context.watch<AppState>();
     final brightness = Theme.of(context).brightness;
+    final isMacOS = defaultTargetPlatform == TargetPlatform.macOS;
     // 将应用语义色板桥接到 DesktopTokens,使 MenuStrip 跟随明 / 暗主题。
     // controlColor/borderColor 设为 surface:让菜单栏背景与整体一致,
     // 且 MenuStrip 自带底边框与背景同色而隐藏,整体无可见下边框。
@@ -129,6 +135,7 @@ class _TopMenuState extends State<TopMenu> with WindowListener {
       color: appPalette.surface,
       child: Row(
         children: [
+          if (isMacOS) const SizedBox(width: _macOSWindowControlsWidth),
           // 左上角应用 Logo(矢量,按 DPI 光栅化)
           Padding(
             padding: const EdgeInsets.only(left: 8, right: 4),
@@ -219,23 +226,25 @@ class _TopMenuState extends State<TopMenu> with WindowListener {
             ),
           ),
           _themeToggle(context, app, dt),
-          WindowCaptionButton.minimize(
-            brightness: brightness,
-            onPressed: windowManager.minimize,
-          ),
-          // 最大化按钮:hover 状态由 native 端通过 method channel 推送
-          // (因为 HTMAXBUTTON 抢走了 MouseRegion 事件),在按钮上叠加一层
-          // 半透明背景模拟 hover 效果。点击仍由 native 端转发 SC_MAXIMIZE
-          // 到主窗口触发,不依赖此处的 onPressed。
-          _MaximizeButton(
-            isMaximized: _isMaximized,
-            isHovered: _nativeHoveredButton == 2,
-            brightness: brightness,
-          ),
-          WindowCaptionButton.close(
-            brightness: brightness,
-            onPressed: windowManager.close,
-          ),
+          if (!isMacOS) ...[
+            WindowCaptionButton.minimize(
+              brightness: brightness,
+              onPressed: windowManager.minimize,
+            ),
+            // 最大化按钮:hover 状态由 native 端通过 method channel 推送
+            // (因为 HTMAXBUTTON 抢走了 MouseRegion 事件),在按钮上叠加一层
+            // 半透明背景模拟 hover 效果。点击仍由 native 端转发 SC_MAXIMIZE
+            // 到主窗口触发,不依赖此处的 onPressed。
+            _MaximizeButton(
+              isMaximized: _isMaximized,
+              isHovered: _nativeHoveredButton == 2,
+              brightness: brightness,
+            ),
+            WindowCaptionButton.close(
+              brightness: brightness,
+              onPressed: windowManager.close,
+            ),
+          ],
         ],
       ),
     );
